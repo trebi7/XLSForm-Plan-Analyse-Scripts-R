@@ -421,6 +421,12 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
           <div class="help" data-i18n="hLangue">Change aussi la langue de cette page.</div>
         </div>
       </div>
+
+      <div class="field">
+        <label for="cle_abonnement"><span data-i18n="fCle">Clé d'accès</span> <span class="opt" data-i18n="obligatoire">obligatoire</span></label>
+        <input type="text" id="cle_abonnement" name="cle_abonnement" placeholder="Ex. FRS-4F2A-9QRT" autocomplete="off" spellcheck="false" style="text-transform:uppercase" required>
+        <div class="help" data-i18n="hCle">Reçue par email après votre paiement Chariow. Saisissez-la avec la même adresse email que pour le paiement. <a href="https://trebi7.github.io/Packs-Data-Analyst/activer.html" target="_blank" rel="noopener">Recevoir ma clé</a></div>
+      </div>
     </div>
 
     <div class="section">
@@ -595,6 +601,11 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       pied:"Vos livrables sont générés automatiquement par IA et envoyés par email en quelques minutes.<br>Aucune donnée n'est conservée au-delà du traitement de votre demande.",
       eChamps:"Merci de renseigner le nom du projet, votre email, le type d'étude, le domaine / secteur et de joindre votre questionnaire.",
       eEmail:"L'adresse email saisie n'est pas valide.",
+      fCle:"Clé d'accès",
+      hCle:'Reçue par email après votre paiement Chariow. Saisissez-la avec la même adresse email que pour le paiement. <a href="https://trebi7.github.io/Packs-Data-Analyst/activer.html" target="_blank" rel="noopener">Recevoir ma clé</a>',
+      eCle:"Saisissez la clé reçue par email après votre paiement.",
+      cleVerif:"Vérification de votre clé…",
+      eCleReseau:"La vérification de votre clé n'a pas répondu. Réessayez dans un instant.",
       eTypeAutre:"Merci de préciser le type d'étude sélectionné.",
       eFormat:"Format non supporté. Merci de choisir un fichier .docx, .xlsx ou .pdf.",
       eVieuxDoc:"Le format .doc n'est pas supporté. Enregistrez votre fichier en .docx puis réessayez.",
@@ -668,6 +679,11 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       pied:"Your deliverables are generated automatically by AI and sent by email within minutes.<br>No data is retained beyond the processing of your request.",
       eChamps:"Please fill in the project name, your email, the study type, the field / sector and attach your questionnaire.",
       eEmail:"The email address entered is not valid.",
+      fCle:"Access key",
+      hCle:'Sent to you by email after your Chariow payment. Enter it with the same email address you paid with. <a href="https://trebi7.github.io/Packs-Data-Analyst/activer.html" target="_blank" rel="noopener">Get my key</a>',
+      eCle:"Enter the key you received by email after your payment.",
+      cleVerif:"Checking your key…",
+      eCleReseau:"The key check did not respond. Please try again in a moment.",
       eTypeAutre:"Please specify the selected study type.",
       eFormat:"Unsupported format. Please choose a .docx, .xlsx or .pdf file.",
       eVieuxDoc:"The .doc format is not supported. Save your file as .docx and try again.",
@@ -982,6 +998,26 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
     const jeton = lireJeton();
     if (!jeton){ showStatus('error', diagnosticTurnstile()); return; }
 
+    // Vérifie que l'email et la clé ouvrent ce pack, sans consommer de crédit :
+    // le crédit n'est retiré qu'au moment de la génération, côté serveur.
+    const cle = form.cle_abonnement.value.trim().toUpperCase();
+    form.cle_abonnement.value = cle;
+    if (cle.length < 8){ showStatus('error', t.eCle); form.cle_abonnement.focus(); return; }
+    submitBtn.disabled = true;
+    btnLabel.textContent = t.cleVerif;
+    let verif;
+    try {
+      const rv = await fetch('https://davy77.app.n8n.cloud/webhook/abonnement-verification', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ produit:'scripts-r', email_notification: form.email_notification.value.trim(),
+          cle_abonnement: cle, mode:'check', ui_lang: lang })
+      });
+      verif = await rv.json().catch(() => ({ ok:false }));
+    } catch (err) { verif = { ok:false, message: t.eCleReseau }; }
+    submitBtn.disabled = false;
+    btnLabel.textContent = t.btn;
+    if (!verif || !verif.ok){ showStatus('error', (verif && verif.message) || t.eCleReseau); form.cle_abonnement.focus(); return; }
+
     // Noms de champs alignés sur le nœud n8n "Soumettre un Questionnaire".
     const fd = new FormData();
     fd.append('nom_projet', form.nom_projet.value.trim());
@@ -994,6 +1030,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
     fd.append('format_xlsform', form.format_xlsform.value);
     fd.append('observations', form.observations.value.trim());
     fd.append('cf-turnstile-response', jeton);
+    fd.append('cle_abonnement', cle);
     fd.append('questionnaire_file', fileInput.files[0]);
     Array.from(docsInput.files || []).forEach((f,i)=> fd.append('doc_supp_' + i, f));
 
