@@ -201,6 +201,10 @@ textarea{resize:vertical;min-height:76px;}
 .dropzone .main-txt{font-size:14px;font-weight:600;color:var(--text);}
 .dropzone .sub-txt{font-size:12px;color:var(--text-muted);margin-top:4px;}
 .dropzone .file-name{font-size:13px;font-weight:600;color:var(--accent-green);margin-top:6px;word-break:break-all;}
+.dropzone .doc-item{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:4px;}
+.dropzone .doc-remove{font:inherit;font-size:12px;font-weight:600;color:#c62828;background:#fff;border:1px solid #f1c4c4;border-radius:4px;padding:2px 8px;cursor:pointer;}
+.dropzone .doc-remove:hover{background:#ffebee;border-color:#c62828;}
+.dropzone .doc-remove:focus-visible{outline:2px solid #c62828;outline-offset:2px;}
 input[type=file]{display:none;}
 
 .submit-bar{
@@ -613,6 +617,8 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       eTaille:function(m){return "Ce fichier fait "+m+" Mo, au-delà de la limite de "+MAX_MO+" Mo.";},
       eFormatDocs:function(l){return "Format non supporté parmi les documents complémentaires : "+l+". Seuls .docx et .pdf sont acceptés.";},
       eTropDocs:function(n){return "Trop de documents complémentaires ("+n+"). Merci de ne pas dépasser "+MAX_DOCS_COMPLEMENTAIRES+" fichiers.";},
+      retirerDoc:"✕ Retirer",
+      retirerDocTitre:function(n){return "Retirer le document "+n;},
       eTurnstile:"Merci de cocher la case du contrôle anti-robot avant d'envoyer.",
       eTurnstileScript:"Le contrôle anti-robot n'a pas pu se charger. Vérifiez votre connexion, désactivez un éventuel bloqueur de publicités, puis rechargez la page.",
       eTurnstileWidget:"Le contrôle anti-robot ne s'affiche pas. Cette page doit être ouverte depuis son adresse web (https://…) et non depuis un fichier local, et son domaine doit être autorisé dans les réglages Cloudflare du widget.",
@@ -691,6 +697,8 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       eTaille:function(m){return "This file is "+m+" MB, above the "+MAX_MO+" MB limit.";},
       eFormatDocs:function(l){return "Unsupported format among the supporting documents: "+l+". Only .docx and .pdf are accepted.";},
       eTropDocs:function(n){return "Too many supporting documents ("+n+"). Please do not exceed "+MAX_DOCS_COMPLEMENTAIRES+" files.";},
+      retirerDoc:"✕ Remove",
+      retirerDocTitre:function(n){return "Remove the document "+n;},
       eTurnstile:"Please tick the anti-bot check box before sending.",
       eTurnstileScript:"The anti-bot check could not load. Check your connection, disable any ad blocker, then reload the page.",
       eTurnstileWidget:"The anti-bot check is not showing. This page must be opened from its web address (https://…) rather than a local file, and its domain must be allowed in the widget's Cloudflare settings.",
@@ -798,15 +806,18 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
   });
   fileInput.addEventListener('change', updateFileLabel);
 
-  dropzoneDocs.addEventListener('click', () => docsInput.click());
+  // Documents complémentaires : la liste est tenue en mémoire. Chaque nouvel ajout
+  // complète les fichiers déjà choisis, et chaque fichier peut être retiré avant l'envoi.
+  let docsList = [];
+  dropzoneDocs.addEventListener('click', e => { if (e.target.closest('.doc-remove')) return; docsInput.click(); });
   ['dragenter','dragover'].forEach(evt =>
     dropzoneDocs.addEventListener(evt, e => { e.preventDefault(); dropzoneDocs.classList.add('drag'); }));
   ['dragleave','drop'].forEach(evt =>
     dropzoneDocs.addEventListener(evt, e => { e.preventDefault(); dropzoneDocs.classList.remove('drag'); }));
   dropzoneDocs.addEventListener('drop', e => {
-    if (e.dataTransfer.files.length) { docsInput.files = e.dataTransfer.files; updateDocsLabel(); }
+    if (e.dataTransfer.files.length) ajouterDocs(e.dataTransfer.files);
   });
-  docsInput.addEventListener('change', updateDocsLabel);
+  docsInput.addEventListener('change', () => { ajouterDocs(docsInput.files); docsInput.value = ''; });
 
   function extension(nom){ const i = nom.lastIndexOf('.'); return i>0 ? nom.slice(i+1).toLowerCase() : ''; }
 
@@ -830,25 +841,54 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
     fileNameEl.textContent = '✓ ' + f.name + ' (' + mo.toFixed(2) + (lang==='fr'?' Mo)':' MB)');
   }
 
-  function updateDocsLabel(){
-    const t = I18N[lang], files = Array.from(docsInput.files || []);
-    if (!files.length){
-      dropzoneDocs.classList.remove('has-file'); docsFileNamesEl.textContent = ''; return;
-    }
-    const invalid = files.filter(f => !/^(docx|pdf)$/.test(extension(f.name)));
-    const tropGros = files.filter(f => f.size/1024/1024 > MAX_MO);
-    let err = '';
-    if (invalid.length) err = t.eFormatDocs(invalid.map(f=>f.name).join(', '));
-    else if (files.length > MAX_DOCS_COMPLEMENTAIRES) err = t.eTropDocs(files.length);
-    else if (tropGros.length) err = t.eTaille((tropGros[0].size/1024/1024).toFixed(2));
-    if (err){
-      showStatus('error', err);
-      docsInput.value = ''; dropzoneDocs.classList.remove('has-file'); docsFileNamesEl.textContent = '';
+  // Ajoute des fichiers à la liste : les fichiers valides sont gardés, les autres
+  // sont signalés, et un fichier déjà présent n'est pas ajouté deux fois.
+  function ajouterDocs(liste){
+    const t = I18N[lang], nouveaux = Array.from(liste || []);
+    if (!nouveaux.length) return;
+    const invalid = nouveaux.filter(f => !/^(docx|pdf)$/.test(extension(f.name)));
+    const tropGros = nouveaux.filter(f => /^(docx|pdf)$/.test(extension(f.name)) && f.size/1024/1024 > MAX_MO);
+    const valides = nouveaux.filter(f => invalid.indexOf(f) === -1 && tropGros.indexOf(f) === -1);
+    const fusion = docsList.slice();
+    valides.forEach(f => {
+      if (!fusion.some(d => d.name === f.name && d.size === f.size && d.lastModified === f.lastModified)) fusion.push(f);
+    });
+    if (fusion.length > MAX_DOCS_COMPLEMENTAIRES){
+      showStatus('error', t.eTropDocs(fusion.length));
       return;
     }
-    dropzoneDocs.classList.add('has-file');
-    docsFileNamesEl.innerHTML = files.map(f =>
-      '✓ ' + f.name + ' (' + (f.size/1024/1024).toFixed(2) + (lang==='fr'?' Mo)':' MB)')).join('<br>');
+    docsList = fusion;
+    updateDocsLabel();
+    if (invalid.length) showStatus('error', t.eFormatDocs(invalid.map(f=>f.name).join(', ')));
+    else if (tropGros.length) showStatus('error', t.eTaille((tropGros[0].size/1024/1024).toFixed(2)));
+  }
+
+  function retirerDoc(index){
+    docsList.splice(index, 1);
+    updateDocsLabel();
+  }
+
+  // Affiche la liste avec un bouton « Retirer » par fichier (rappelée aussi au changement de langue).
+  function updateDocsLabel(){
+    const t = I18N[lang];
+    docsFileNamesEl.textContent = '';
+    dropzoneDocs.classList.toggle('has-file', docsList.length > 0);
+    docsList.forEach((f, i) => {
+      const ligne = document.createElement('div');
+      ligne.className = 'doc-item';
+      const nom = document.createElement('span');
+      nom.textContent = '✓ ' + f.name + ' (' + (f.size/1024/1024).toFixed(2) + (lang==='fr'?' Mo)':' MB)');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'doc-remove';
+      btn.textContent = t.retirerDoc;
+      btn.title = t.retirerDocTitre(f.name);
+      btn.setAttribute('aria-label', t.retirerDocTitre(f.name));
+      btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); retirerDoc(i); });
+      ligne.appendChild(nom);
+      ligne.appendChild(btn);
+      docsFileNamesEl.appendChild(ligne);
+    });
   }
 
   typeEtudeSelect.addEventListener('change', () => {
@@ -973,7 +1013,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
     typeEtudeAutreField.style.display = 'none';
     typeEtudeAutreInput.required = false;
     dropzone.classList.remove('has-file'); fileNameEl.textContent = '';
-    dropzoneDocs.classList.remove('has-file'); docsFileNamesEl.textContent = '';
+    docsList = []; updateDocsLabel();
     statusEl.className = 'status';
     jetonTurnstile = '';
     if (window.turnstile && window.turnstile.reset) window.turnstile.reset();
@@ -1032,7 +1072,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
     fd.append('cf-turnstile-response', jeton);
     fd.append('cle_abonnement', cle);
     fd.append('questionnaire_file', fileInput.files[0]);
-    Array.from(docsInput.files || []).forEach((f,i)=> fd.append('doc_supp_' + i, f));
+    docsList.forEach((f,i)=> fd.append('doc_supp_' + i, f));
 
     submitBtn.disabled = true;
     submitBtn.classList.add('submitting');
