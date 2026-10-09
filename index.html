@@ -528,7 +528,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
 
   <div class="progress-panel" id="progressPanel">
     <h2 id="progressTitle" data-i18n="pTitre">Traitement de votre questionnaire en cours…</h2>
-    <p class="sub" data-i18n="pSub">Merci de laisser cette page ouverte. Le traitement complet dure généralement environ 6 minutes.</p>
+    <p class="sub" data-i18n="pSub">Merci de laisser cette page ouverte. Le traitement complet dure généralement 15 à 17 minutes : trois passages par le modèle sont nécessaires, pour le XLSForm, le plan d'analyse et les scripts R.</p>
 
     <div class="progress-bar-track">
       <div class="progress-bar-fill" id="progressFill"></div>
@@ -596,7 +596,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       obligatoire:"obligatoire", optionnel:"optionnel", requis:"requis",
       btn:"Envoyer mes livrables", btnEnvoi:"Envoi en cours…",
       pTitre:"Traitement de votre questionnaire en cours…",
-      pSub:"Merci de laisser cette page ouverte. Le traitement complet dure généralement environ 6 minutes.",
+      pSub:"Merci de laisser cette page ouverte. Le traitement complet dure généralement 15 à 17 minutes : trois passages par le modèle sont nécessaires, pour le XLSForm, le plan d'analyse et les scripts R.",
       pNote:"Cette progression est une estimation basée sur la durée moyenne de traitement. La confirmation officielle — avec les liens vers vos quatre livrables — vous parvient par email.",
       pReset:"Envoyer un autre questionnaire",
       pDemarrage:"Démarrage…", pFini:"Traitement terminé (estimation)", pFinalisation:"Finalisation…",
@@ -676,7 +676,7 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
       obligatoire:"required", optionnel:"optional", requis:"required",
       btn:"Send me my deliverables", btnEnvoi:"Sending…",
       pTitre:"Processing your questionnaire…",
-      pSub:"Please keep this page open. The full process usually takes about 6 minutes.",
+      pSub:"Please keep this page open. The full process usually takes 15 to 17 minutes: the model runs three times, for the XLSForm, the analysis plan and the R scripts.",
       pNote:"This progress is an estimate based on the average processing time. The official confirmation — with the links to your four deliverables — reaches you by email.",
       pReset:"Send another questionnaire",
       pDemarrage:"Starting…", pFini:"Processing complete (estimate)", pFinalisation:"Finalising…",
@@ -727,7 +727,9 @@ button[type=submit]:disabled{background:#9fb0c4;cursor:not-allowed;}
   };
 
   // Durées observées, en secondes, alignées sur les étapes ci-dessus.
-  const DUREES = [10, 55, 15, 130, 110, 20, 10, 5];
+  // Durées calées sur l'exécution réelle du 9 octobre 2026 (15 min 53 s au total) :
+  // structure XLSForm 204 s, plan d'analyse 200 s, scripts R 527 s.
+  const DUREES = [10, 205, 10, 200, 530, 20, 10, 5];
   const TOTAL_MS = DUREES.reduce((s,x)=>s+x,0)*1000;
   const CUM_MS = (()=>{let c=0;return DUREES.map(s=>(c+=s*1000));})();
 
